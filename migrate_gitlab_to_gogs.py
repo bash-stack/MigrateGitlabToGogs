@@ -25,6 +25,9 @@ parser.add_argument('--no_confirm',
 parser.add_argument('--skip_existing', 
                     help='Skip repositories that already exist on remote without asking the user',
                     action='store_true')
+parser.add_argument('--use_ssh', 
+                    help='Use ssh to pull/push files to repos',
+                    action='store_true')
 
 args = parser.parse_args()
 
@@ -106,7 +109,10 @@ if not args.no_confirm:
 
 for i in range(len(filtered_projects)):
     src_name = filtered_projects[i]['name']
-    src_url = filtered_projects[i]['ssh_url_to_repo']
+    if args.use_ssh:
+        src_url = filtered_projects[i]['ssh_url_to_repo']
+    else:
+        src_url = filtered_projects[i]['http_url_to_repo']
     src_description = filtered_projects[i]['description']
     dst_name = src_name.replace(' ','-')
 
@@ -118,8 +124,11 @@ for i in range(len(filtered_projects)):
 
     # Create repo 
     if args.add_to_private:
+        print('Posting to:' + gots_url + '/user/repos')
         create_repo = s.post(gogs_url+'/user/repos', data=dict(token=gogs_token, name=dst_name, private=True))
+
     elif args.add_to_organization:
+        print('Posting to:' + gogs_url + '/org/%s/repos')
         create_repo = s.post(gogs_url+'/org/%s/repos'%args.add_to_organization, 
                             data=dict(token=gogs_token, name=dst_name, private=True, description=src_description))
     if create_repo.status_code != 201:
@@ -134,7 +143,10 @@ for i in range(len(filtered_projects)):
     
     dst_info = json.loads(create_repo.text)
 
-    dst_url = dst_info['ssh_url']
+    if args.use_ssh:
+        dst_url = dst_info['ssh_url']
+    else:
+        dst_url = dst_info['html_url']
     # Git pull and push
     subprocess.check_call(['git','clone','--bare',src_url])
     os.chdir(src_url.split('/')[-1])

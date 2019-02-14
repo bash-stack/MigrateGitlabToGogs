@@ -13,7 +13,8 @@ usage: migrate_gitlab_to_gogs.py [-h] --source_namespace SOURCE_NAMESPACE
                                  [--add_to_private]
                                  [--add_to_organization organization_name]
                                  --source_repo SOURCE_REPO --target_repo
-                                 TARGET_REPO [--no_confirm]
+                                 TARGET_REPO [--no_confirm] [--skip_existing]
+                                 [--use_ssh]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -41,6 +42,9 @@ optional arguments:
                         URL to your gogs / gitea repo in the format
                         http://mygogs.com/
   --no_confirm          Skip user confirmation of each single step
+  --skip_existing       Skip repositories that already exist on remote without
+                        asking the user
+  --use_ssh             Use ssh to pull/push files to repos
 ```
 
 ## Requirements
