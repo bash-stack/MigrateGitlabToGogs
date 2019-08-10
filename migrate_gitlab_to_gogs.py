@@ -147,8 +147,9 @@ for i in range(len(filtered_projects)):
         dst_url = dst_info['ssh_url']
     else:
         dst_url = dst_info['html_url']
-    # Git pull and push
-    subprocess.check_call(['git','clone','--bare',src_url])
+
+    # Mirror the git repository (http://blog.plataformatec.com.br/2013/05/how-to-properly-mirror-a-git-repository/)
+    subprocess.check_call(['git','clone','--mirror',src_url])
     os.chdir(src_url.split('/')[-1])
     branches=subprocess.check_output(['git','branch','-a'])
     if len(branches) == 0:
