@@ -8,24 +8,24 @@ import os
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--source_namespace', 
+parser.add_argument('--source_namespace',
                     help='The namespace in gitlab as it appears in URLs. For example, given the repository address http://mygitlab.com/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". Hence I would pass harry as parameter.',
                     required=True)
 parser.add_argument('--add_to_private',default=None, action='store_true',help='If you want to add the repositories under your own name, ie. not in any organisation, use this flag.')
 parser.add_argument('--add_to_organization',default=None, metavar='organization_name', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in Gitlab. The name can be taken from the URL, for example, if your organization is http://mygogs-repo.com/org/my-awesome-organisation/dashboard then pass my-awesome-organisation here')
-parser.add_argument('--source_repo', 
+parser.add_argument('--source_repo',
                     help='URL to your gitlab repo in the format http://mygitlab.com/',
                     required=True)
-parser.add_argument('--target_repo', 
+parser.add_argument('--target_repo',
                     help='URL to your gogs / gitea repo in the format http://mygogs.com/',
                     required=True)
-parser.add_argument('--no_confirm', 
+parser.add_argument('--no_confirm',
                     help='Skip user confirmation of each single step',
                     action='store_true')
-parser.add_argument('--skip_existing', 
+parser.add_argument('--skip_existing',
                     help='Skip repositories that already exist on remote without asking the user',
                     action='store_true')
-parser.add_argument('--use_ssh', 
+parser.add_argument('--use_ssh',
                     help='Use ssh to pull/push files to repos',
                     action='store_true')
 
@@ -122,14 +122,14 @@ for i in range(len(filtered_projects)):
         if 'yes' != input('Do you want to continue? (please answer yes or no) '):
             print('\nYou decided to cancel...')
 
-    # Create repo 
+    # Create repo
     if args.add_to_private:
         print('Posting to:' + gots_url + '/user/repos')
         create_repo = s.post(gogs_url+'/user/repos', data=dict(token=gogs_token, name=dst_name, private=True))
 
     elif args.add_to_organization:
         print('Posting to:' + gogs_url + '/org/%s/repos')
-        create_repo = s.post(gogs_url+'/org/%s/repos'%args.add_to_organization, 
+        create_repo = s.post(gogs_url+'/org/%s/repos'%args.add_to_organization,
                             data=dict(token=gogs_token, name=dst_name, private=True, description=src_description))
     if create_repo.status_code != 201:
         print('Could not create repo %s because of %s'%(src_name,json.loads(create_repo.text)['message']))
@@ -140,7 +140,7 @@ for i in range(len(filtered_projects)):
                 print('\nYou decided to cancel...')
                 exit(1)
         continue
-    
+
     dst_info = json.loads(create_repo.text)
 
     if args.use_ssh:
@@ -156,11 +156,11 @@ for i in range(len(filtered_projects)):
     else:
         subprocess.check_call(['git','push','--mirror',dst_url])
     os.chdir('..')
-    subprocess.check_call(['rm','-rf',src_url.split('/')[-1]]) 
+    subprocess.check_call(['rm','-rf',src_url.split('/')[-1]])
 
     print('\n\nFinished migration. New project URL is %s'%dst_info['html_url'])
     print('Please open the URL and check if everything is fine.')
     if not args.no_confirm:
         input('Hit any key to continue!')
-    
+
 print('\n\nEverything finished!\n')
