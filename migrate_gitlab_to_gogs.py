@@ -9,8 +9,8 @@ import sys
 
 import argparse
 
-def askToContinue(args):
-    if not args.no_confirm:
+def askToContinue(args, force = False):
+    if force or (not args.no_confirm):
         try:
             input('Press Enter to continue or hit the interrupt key (normally Control-C or Delete) to cancel.')
         except KeyboardInterrupt:
@@ -61,7 +61,7 @@ if not (args.add_to_private or args.add_to_organization is not None):
     parser.error("Please either use flag '--add_to_private' or provide an oranization via '--add_to_organization'.")
 
 print("Going to clone all repositories in namespace '{}' at the GitLab instance at {} to the current working directory ".format(args.source_namespace, args.source_repo), end="")
-print("and push them as private repositories to ", end="")
+print("and push them as repositories to ", end="")
 if args.add_to_private:
     print("your personal account ", end="")
 else:
@@ -122,17 +122,20 @@ sessionGogs = requests.Session()
 # https://docs.gitea.io/en-us/api-usage/#more-on-the-authorization-header
 sessionGogs.headers.update({'Authorization': 'token {}'.format(gogs_token)})
 
-for projectCounter in range(len(filtered_projects)):
-    src_name = filtered_projects[projectCounter]['name']
+numberOfProjectsToMigrate = len(filtered_projects)
+
+for projectCounter in range(numberOfProjectsToMigrate):
+    currentGitlabProject = filtered_projects[projectCounter]
+
+    src_name = currentGitlabProject['name']
     if args.use_ssh:
-        src_url = filtered_projects[projectCounter]['ssh_url_to_repo']
+        src_url = currentGitlabProject['ssh_url_to_repo']
     else:
-        src_url = filtered_projects[projectCounter]['http_url_to_repo']
-    src_description = filtered_projects[projectCounter]['description']
+        src_url = currentGitlabProject['http_url_to_repo']
     dst_name = src_name.replace(' ','-')
 
     print()
-    print("[{}/{}] Migrating repository at {} to destination '{}'...".format(projectCounter + 1, len(filtered_projects), src_url, dst_name))
+    print("[{}/{}] Migrating repository at {} to destination '{}'...".format(projectCounter + 1, numberOfProjectsToMigrate, src_url, dst_name))
     askToContinue(args)
 
     post_url = None
@@ -141,9 +144,16 @@ for projectCounter in range(len(filtered_projects)):
     else:
         post_url = gogs_url + "/org/{}/repos".format(args.add_to_organization)
 
+    createRepoOption = {
+        "auto_init": False, # Do NOT initialize repository as this would add .gitignore, License, and README.
+        "description": currentGitlabProject["description"],
+        "name": dst_name,
+        "private": False if currentGitlabProject["visibility"] == "public" else True, # private and internal GitLab projects become private repositories
+    }
+
     print()
-    print("[{}/{}] Creating private repository '{}' via POSTing to: {}".format(projectCounter + 1, len(filtered_projects), dst_name, post_url))
-    create_repo = sessionGogs.post(post_url, json=dict(name=dst_name, private=True, description=src_description))
+    print("[{}/{}] Creating repository '{}' by POSTing {} to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, createRepoOption, post_url))
+    create_repo = sessionGogs.post(post_url, json=createRepoOption)
 
     # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
     if create_repo.status_code != 201:
@@ -153,7 +163,7 @@ for projectCounter in range(len(filtered_projects)):
                 print("Skipping existing repository.")
             else:
                 print("Shall we skip that existing repository and continue?")
-                askToContinue(args)
+                askToContinue(args, True)
             continue
         else:
             sys.exit("Error: Cannot handle HTTP status code.")
@@ -167,13 +177,13 @@ for projectCounter in range(len(filtered_projects)):
 
     # Mirror the git repository (http://blog.plataformatec.com.br/2013/05/how-to-properly-mirror-a-git-repository/)
     print()
-    print("[{}/{}] Cloning repository from: {}".format(projectCounter + 1, len(filtered_projects), src_url))
+    print("[{}/{}] Cloning repository from: {}".format(projectCounter + 1, numberOfProjectsToMigrate, src_url))
     subprocess.check_call(['git', 'clone', '--mirror', src_url])
 
     os.chdir(src_url.split('/')[-1])
 
     print()
-    print("[{}/{}] Pushing repository to: {}".format(projectCounter + 1, len(filtered_projects), dst_url))
+    print("[{}/{}] Pushing repository to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_url))
     branches=subprocess.check_output(['git','branch','-a'])
     if len(branches) == 0:
         print("Warning: This repository is empty - skipping push.")
@@ -183,8 +193,40 @@ for projectCounter in range(len(filtered_projects)):
     os.chdir('..')
     subprocess.check_call(['rm','-rf',src_url.split('/')[-1]])
 
+    # This has to be done after migrating the repository -- as it might be archived.
+    # If we would set the repository as archived before we would have pushed it,
+    # this would faile because one cannot push to archived repositories.
+    patch_url = "{}/repos/{}/{}".format(gogs_url, args.add_to_organization, dst_name)
+
+    editRepoOption = {
+        "allow_merge_commits":          dst_info["allow_merge_commits"],            # no equivalent GitLab setting found
+        "allow_rebase":                 dst_info["allow_rebase"],                   # no equivalent GitLab setting found
+        "allow_rebase_explicit":        dst_info["allow_rebase_explicit"],          # no equivalent GitLab setting found
+        "allow_squash_merge":           dst_info["allow_squash_merge"],             # no equivalent GitLab setting found
+        "archived":                     currentGitlabProject["archived"],           # use GitLab setting
+        "default_branch":               currentGitlabProject["default_branch"],     # use GitLab setting
+        "description":                  dst_info["description"],                    # do not change as it was given on create (cf. above)
+        "has_issues":                   currentGitlabProject["issues_enabled"],     # use GitLab setting
+        "has_pull_requests":            dst_info["has_pull_requests"],              # no equivalent GitLab setting found
+        "has_wiki":                     currentGitlabProject["wiki_enabled"],       # use GitLab setting
+        "ignore_whitespace_conflicts":  dst_info["ignore_whitespace_conflicts"],    # no equivalent GitLab setting found
+        "name":                         dst_info["name"],                           # do not change as it was given on create (cf. above)
+        "private":                      dst_info["private"],                        # do not change as it was given on create (cf. above)
+        "website":                      dst_info["website"]                         # no equivalent GitLab setting found
+    }
+
     print()
-    print("[{}/{}] Completed migration of repository '{}'. New project URL: {} Please open that URL, check if everything is as expected, and continue the migration afterwards.".format(projectCounter + 1, len(filtered_projects), dst_name, dst_info['html_url']))
+    print("[{}/{}] Editing repository '{}' by PATCHing with '{}' to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, editRepoOption, patch_url))
+    patch_repo = sessionGogs.patch(patch_url, json=editRepoOption)
+
+    # 200: OK - Standard response for successful HTTP requests.
+    if patch_repo.status_code != 200:
+        print("Warning: Could not edit repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_name, patch_repo.status_code, responses[patch_repo.status_code], patch_repo.text))
+        print("Shall we ignore that isse and continue?")
+        askToContinue(args, True)
+
+    print()
+    print("[{}/{}] Completed migration of repository '{}'. Please open the new Gogs / Gitea repository at {}, check there if everything is as expected, and continue the migration afterwards.".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, dst_info['html_url']))
     askToContinue(args)
 
 print()
