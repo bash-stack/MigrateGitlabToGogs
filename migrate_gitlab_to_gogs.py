@@ -14,10 +14,10 @@ parser.add_argument('--source_namespace',
 parser.add_argument('--add_to_private',default=None, action='store_true',help='If you want to add the repositories under your own name, ie. not in any organisation, use this flag.')
 parser.add_argument('--add_to_organization',default=None, metavar='organization_name', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in Gitlab. The name can be taken from the URL, for example, if your organization is http://mygogs-repo.com/org/my-awesome-organisation/dashboard then pass my-awesome-organisation here')
 parser.add_argument('--source_repo',
-                    help='URL to your gitlab repo in the format http://mygitlab.com/',
+                    help='URL to your gitlab repo in the format http://mygitlab.com',
                     required=True)
 parser.add_argument('--target_repo',
-                    help='URL to your gogs / gitea repo in the format http://mygogs.com/',
+                    help='URL to your gogs / gitea repo in the format http://mygogs.com',
                     required=True)
 parser.add_argument('--no_confirm',
                     help='Skip user confirmation of each single step',
