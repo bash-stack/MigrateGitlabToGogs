@@ -97,7 +97,7 @@ while gitlabProjectsNextPageUrl is not None:
     if res.status_code != 200:
         sys.exit("Error: Could not get projects via API. HTTP status code '{} {}' and body: '{}'".format(res.status_code, responses[res.status_code], res.text))
 
-    project_list += json.loads(res.text)
+    project_list += res.json()
 
     if "next" in res.links:
         gitlabProjectsNextPageUrl = res.links["next"]["url"]
@@ -143,7 +143,7 @@ for projectCounter in range(len(filtered_projects)):
 
     print()
     print("[{}/{}] Creating private repository '{}' via POSTing to: {}".format(projectCounter + 1, len(filtered_projects), dst_name, post_url))
-    create_repo = sessionGogs.post(post_url, data=dict(name=dst_name, private=True, description=src_description))
+    create_repo = sessionGogs.post(post_url, json=dict(name=dst_name, private=True, description=src_description))
 
     # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
     if create_repo.status_code != 201:
@@ -158,7 +158,7 @@ for projectCounter in range(len(filtered_projects)):
         else:
             sys.exit("Error: Cannot handle HTTP status code.")
 
-    dst_info = json.loads(create_repo.text)
+    dst_info = create_repo.json()
 
     if args.use_ssh:
         dst_url = dst_info['ssh_url']
