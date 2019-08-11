@@ -55,6 +55,20 @@ parser.add_argument('--add_to_organization',
                     metavar='ORGANIZATION_NAME',
                     help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
 
+parser.add_argument('--force_private',
+                    help='Make all migrated repositories private in Gogs / Gitea even if public in corresponding Gitlab project.',
+                    action='store_true')
+parser.add_argument('--force_archive',
+                    help='Archive all migrated repositories in Gogs / Gitea even if not archived in corresponding Gitlab project.',
+                    action='store_true')
+parser.add_argument('--force_disable_issues',
+                    help='Disable issue tracker in Gogs / Gitea for all migrated repositories even if enabled in corresponding Gitlab project.',
+                    action='store_true')
+parser.add_argument('--force_disable_wiki',
+                    help='Disable wiki in Gogs / Gitea for all migrated repositories even if enabled in corresponding Gitlab project.',
+                    action='store_true')
+
+
 parser.add_argument('--no_confirm',
                     help='Skip user confirmation of each single step.',
                     action='store_true')
@@ -228,6 +242,18 @@ for projectCounter in range(numberOfProjectsToMigrate):
         "private":                      dst_info["private"],                        # do not change as it was given on create (cf. above)
         "website":                      dst_info["website"]                         # no equivalent GitLab setting found
     }
+
+    if args.force_private:
+        editRepoOption["private"] = True
+
+    if args.force_archive:
+        editRepoOption["archived"] = True
+
+    if args.force_disable_issues:
+        editRepoOption["has_issues"] = False
+
+    if args.force_disable_wiki:
+        editRepoOption["has_wiki"] = False
 
     print()
     print("[{}/{}] Editing repository '{}' by PATCHing with '{}' to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, editRepoOption, patch_url))
