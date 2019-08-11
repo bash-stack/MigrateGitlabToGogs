@@ -34,17 +34,27 @@ def getToken(tokenName, tokenEnvName, tokenURL):
     return token
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--source_namespace',
-                    help='The namespace in GitLab as it appears in URLs. For example, given the repository address http://my.gitlab.net/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". In that case, I would pass harry as parameter.',
-                    required=True)
-parser.add_argument('--add_to_private',default=None, action='store_true',help='If you want to add the repositories under your own name, i.e. not in any organisation, use this flag.')
-parser.add_argument('--add_to_organization',default=None, metavar='ORGANIZATION_NAME', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
-parser.add_argument('--source_repo',
+
+parser.add_argument('--gitlab_url',
                     help='URL to your GitLab instance. Must be in the format: http://my.gitlab.net',
                     required=True)
-parser.add_argument('--target_repo',
+parser.add_argument('--gitlab_namespace',
+                    help='The namespace in GitLab as it appears in URLs. For example, given the repository address http://my.gitlab.net/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". In that case, I would pass harry as parameter.',
+                    required=True)
+
+parser.add_argument('--gogs_url',
                     help='URL to your Gogs / Gitea instance. Must be in the format: http://my.gogs.net',
                     required=True)
+
+parser.add_argument('--add_to_private',
+                    default=None,
+                    action='store_true',
+                    help='If you want to add the repositories under your own name, i.e. not in any organisation, use this flag.')
+parser.add_argument('--add_to_organization',
+                    default=None,
+                    metavar='ORGANIZATION_NAME',
+                    help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
+
 parser.add_argument('--no_confirm',
                     help='Skip user confirmation of each single step.',
                     action='store_true')
@@ -60,23 +70,23 @@ args = parser.parse_args()
 if not (args.add_to_private or args.add_to_organization is not None):
     parser.error("Please either use flag '--add_to_private' or provide an oranization via '--add_to_organization'.")
 
-print("Going to clone all repositories in namespace '{}' at the GitLab instance at {} to the current working directory ".format(args.source_namespace, args.source_repo), end="")
+print("Going to clone all repositories in namespace '{}' at the GitLab instance at {} to the current working directory ".format(args.gitlab_namespace, args.gitlab_url), end="")
 print("and push them as repositories to ", end="")
 if args.add_to_private:
     print("your personal account ", end="")
 else:
     print("organisation '{}' ".format(args.add_to_organization), end="")
-print("at the Gogs / Gitea instance at {}.".format(args.target_repo))
+print("at the Gogs / Gitea instance at {}.".format(args.gogs_url))
 
 askToContinue(args)
 
-gitlab_url = args.source_repo + '/api/v4'
-gogs_url = args.target_repo + "/api/v1"
+gitlab_api_url = args.gitlab_url + '/api/v4'
+gogs_api_url = args.gogs_url + "/api/v1"
 
-gitlab_token = getToken('GitLab', 'gitlab_token', "{}/profile/personal_access_tokens".format(args.source_repo))
-gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applications".format(args.target_repo))
+gitlab_token = getToken('GitLab', 'gitlab_token', "{}/profile/personal_access_tokens".format(args.gitlab_url))
+gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applications".format(args.gogs_url))
 
-gitlabProjectsUrl = "{}/projects".format(gitlab_url)
+gitlabProjectsUrl = "{}/projects".format(gitlab_api_url)
 
 print()
 print("Getting projects from GitLab via API at {}...".format(gitlabProjectsUrl))
@@ -109,7 +119,7 @@ while gitlabProjectsNextPageUrl is not None:
 if len(project_list) == 0:
     print("Warning: Could not get any project via API.")
 
-filtered_projects = list(filter(lambda x: x['path_with_namespace'].split('/')[0]==args.source_namespace, project_list))
+filtered_projects = list(filter(lambda x: x['path_with_namespace'].split('/')[0]==args.gitlab_namespace, project_list))
 
 print("Going to migrate the following GitLab projects and repositories, respectively:")
 
@@ -140,9 +150,9 @@ for projectCounter in range(numberOfProjectsToMigrate):
 
     post_url = None
     if args.add_to_private:
-        post_url = gogs_url + '/user/repos'
+        post_url = gogs_api_url + '/user/repos'
     else:
-        post_url = gogs_url + "/org/{}/repos".format(args.add_to_organization)
+        post_url = gogs_api_url + "/org/{}/repos".format(args.add_to_organization)
 
     createRepoOption = {
         "auto_init": False, # Do NOT initialize repository as this would add .gitignore, License, and README.
@@ -197,7 +207,7 @@ for projectCounter in range(numberOfProjectsToMigrate):
     # This has to be done after migrating the repository -- as it might be archived.
     # If we would set the repository as archived before we would have pushed it,
     # this would faile because one cannot push to archived repositories.
-    patch_url = "{}/repos/{}/{}".format(gogs_url, args.add_to_organization, dst_name)
+    patch_url = "{}/repos/{}/{}".format(gogs_api_url, args.add_to_organization, dst_name)
 
     editRepoOption = {
         "allow_merge_commits":          dst_info["allow_merge_commits"],            # no equivalent GitLab setting found
