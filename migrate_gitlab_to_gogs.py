@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import requests
+from http.client import responses
 import json
 import subprocess
 import os
@@ -94,7 +95,6 @@ while not finished:
 
 filtered_projects = list(filter(lambda x: x['path_with_namespace'].split('/')[0]==args.source_namespace, project_list))
 
-
 print("Going to migrate the following GitLab projects and repositories, respectively:")
 
 for p in ([p['path_with_namespace'] for p in filtered_projects]):
@@ -102,35 +102,42 @@ for p in ([p['path_with_namespace'] for p in filtered_projects]):
 
 askToContinue(args)
 
-for i in range(len(filtered_projects)):
-    src_name = filtered_projects[i]['name']
+for projectCounter in range(len(filtered_projects)):
+    src_name = filtered_projects[projectCounter]['name']
     if args.use_ssh:
-        src_url = filtered_projects[i]['ssh_url_to_repo']
+        src_url = filtered_projects[projectCounter]['ssh_url_to_repo']
     else:
-        src_url = filtered_projects[i]['http_url_to_repo']
-    src_description = filtered_projects[i]['description']
+        src_url = filtered_projects[projectCounter]['http_url_to_repo']
+    src_description = filtered_projects[projectCounter]['description']
     dst_name = src_name.replace(' ','-')
 
-    print('\n\nMigrating project %s to project %s now.'%(src_url,dst_name))
-
+    print()
+    print("[{}/{}] Migrating repository at {} to destination '{}'...".format(projectCounter + 1, len(filtered_projects), src_url, dst_name))
     askToContinue(args)
 
-    # Create repo
+    post_url = None
     if args.add_to_private:
-        print('Posting to:' + gogs_url + '/user/repos')
-        create_repo = s.post(gogs_url+'/user/repos', data=dict(token=gogs_token, name=dst_name, private=True))
+        post_url = gogs_url + '/user/repos'
+    else:
+        post_url = gogs_url + "/org/{}/repos".format(args.add_to_organization)
 
-    elif args.add_to_organization:
-        print('Posting to:' + gogs_url + '/org/%s/repos')
-        create_repo = s.post(gogs_url+'/org/%s/repos'%args.add_to_organization,
-                            data=dict(token=gogs_token, name=dst_name, private=True, description=src_description))
+    print()
+    print("[{}/{}] Creating private repository '{}' via POSTing to: {}".format(projectCounter + 1, len(filtered_projects), dst_name, post_url))
+    create_repo = s.post(post_url, data=dict(token=gogs_token, name=dst_name, private=True, description=src_description))
+
+    # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
     if create_repo.status_code != 201:
-        print('Could not create repo %s because of %s'%(src_name,json.loads(create_repo.text)['message']))
-        if args.skip_existing:
-            print('\nSkipped')
+        print("Warning: Could not create repository '{}'. HTTP status code '{} {}' and message '{}'.".format(dst_name, create_repo.status_code, responses[create_repo.status_code], json.loads(create_repo.text)['message']))
+        if create_repo.status_code == 409:
+            if args.skip_existing:
+                print("Skipping existing repository.")
+            else:
+                print("Shall we skip that existing repository and continue?")
+                askToContinue(args)
+            continue
         else:
+            print("Shall we continue in spite of that error?")
             askToContinue(args)
-        continue
 
     dst_info = json.loads(create_repo.text)
 
@@ -140,18 +147,26 @@ for i in range(len(filtered_projects)):
         dst_url = dst_info['html_url']
 
     # Mirror the git repository (http://blog.plataformatec.com.br/2013/05/how-to-properly-mirror-a-git-repository/)
-    subprocess.check_call(['git','clone','--mirror',src_url])
+    print()
+    print("[{}/{}] Cloning repository from: {}".format(projectCounter + 1, len(filtered_projects), src_url))
+    subprocess.check_call(['git', 'clone', '--mirror', src_url])
+
     os.chdir(src_url.split('/')[-1])
+
+    print()
+    print("[{}/{}] Pushing repository to: {}".format(projectCounter + 1, len(filtered_projects), dst_url))
     branches=subprocess.check_output(['git','branch','-a'])
     if len(branches) == 0:
-        print('\n\nThis repository is empty - skipping push')
+        print("Warning: This repository is empty - skipping push.")
     else:
         subprocess.check_call(['git','push','--mirror',dst_url])
+
     os.chdir('..')
     subprocess.check_call(['rm','-rf',src_url.split('/')[-1]])
 
-    print('\n\nFinished migration. New project URL is %s'%dst_info['html_url'])
-    print('Please open the URL and check if everything is fine.')
+    print()
+    print("[{}/{}] Completed migration of repository '{}'. New project URL: {} Please open that URL, check if everything is as expected, and continue the migration afterwards.".format(projectCounter + 1, len(filtered_projects), dst_name, dst_info['html_url']))
     askToContinue(args)
 
-print('\n\nEverything finished!\n')
+print()
+print("Migration completed.")
