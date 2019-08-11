@@ -59,7 +59,7 @@ args = parser.parse_args()
 if not (args.add_to_private or args.add_to_organization is not None):
     parser.error("Please either use flag '--add_to_private' or provide an oranization via '--add_to_organization'.")
 
-print("Going to clone all repositories in group '{}' at '{}' to the current working directory ".format(args.source_namespace, args.source_repo), end="")
+print("Going to clone all repositories in namespace '{}' at '{}' to the current working directory ".format(args.source_namespace, args.source_repo), end="")
 print("and push them as private repositories to ", end="")
 if args.add_to_private:
     print("your personal account ", end="")
