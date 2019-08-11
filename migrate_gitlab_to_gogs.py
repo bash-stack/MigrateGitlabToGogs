@@ -16,6 +16,22 @@ def askToContinue(args):
             print()
             sys.exit("Canceling as requested by the user.")
 
+def getToken(tokenName, tokenEnvName, tokenURL):
+    if tokenEnvName in os.environ:
+        token = os.environ[tokenEnvName]
+        if len(token) < 1:
+            sys.exit("Error: Environment variable '{}' must not be empty.".format(tokenEnvName))
+    else:
+        print()
+        print("Please provide your personal {} access token.".format(tokenName))
+        print("Hint: That token is not your password but a hash value which consists of random letters and numbers.")
+        print("      You can generate an access token at {}.".format(tokenURL))
+        token = input("{}=".format(tokenEnvName))
+        if len(token) < 1:
+            sys.exit("Error: The given token must not be empty.")
+
+    return token
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--source_namespace',
                     help='The namespace in gitlab as it appears in URLs. For example, given the repository address http://mygitlab.com/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". Hence I would pass harry as parameter.',
@@ -55,26 +71,8 @@ askToContinue(args)
 gogs_url = args.target_repo + "/api/v1"
 gitlab_url = args.source_repo + '/api/v4'
 
-if 'gogs_token' in os.environ:
-    gogs_token=os.environ['gogs_token']
-else:
-    gogs_token = input(("\n\nPlease provide the gogs access token which we use to access \n"
-                        "your account. This is NOT your password! Go to \n"
-                        "/user/settings/applications\n"
-                        "and click on 'Create new token', and copy and paste the \n"
-                        "resulting token which is shown afterwards. It should look \n"
-                        "like 3240823dfsaefwio328923490832a.\n\ngogs_token=").format(args.target_repo))
-assert len(gogs_token)>0, 'The gogs token cannot be empty!'
-
-if 'gitlab_token' in os.environ:
-    gitlab_token=os.environ['gitlab_token']
-else:
-    gitlab_token = input(("\n\nToken to access your GITLAB account. This is NOT your password! Got to \n"
-                        "{}/profile/account \n"
-                        "and copy the value in section 'Private token'. It should \n"
-                        "look like du8dfsJlfEWFJAFhs\n"
-                        "\ngitlab_token=").format(args.source_repo))
-assert len(gitlab_token)>0, 'The gitlab token cannot be empty!'
+gitlab_token = getToken('GitLab', 'gitlab_token', "{}/profile/personal_access_tokens".format(args.source_repo))
+gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applications".format(args.target_repo))
 
 #tmp_dir = '/home/simon/tmp/gitlab_gogs_migration'
 #print('Using temporary directory %s'%tmp_dir)
