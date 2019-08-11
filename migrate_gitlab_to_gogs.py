@@ -37,7 +37,7 @@ parser.add_argument('--source_namespace',
                     help='The namespace in gitlab as it appears in URLs. For example, given the repository address http://mygitlab.com/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". Hence I would pass harry as parameter.',
                     required=True)
 parser.add_argument('--add_to_private',default=None, action='store_true',help='If you want to add the repositories under your own name, ie. not in any organisation, use this flag.')
-parser.add_argument('--add_to_organization',default=None, metavar='organization_name', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in Gitlab. The name can be taken from the URL, for example, if your organization is http://mygogs-repo.com/org/my-awesome-organisation/dashboard then pass my-awesome-organisation here')
+parser.add_argument('--add_to_organization',default=None, metavar='ORGANIZATION_NAME', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in Gitlab. The name can be taken from the URL, for example, if your organization is http://mygogs-repo.com/org/my-awesome-organisation/dashboard then pass my-awesome-organisation here')
 parser.add_argument('--source_repo',
                     help='URL to your gitlab repo in the format http://mygitlab.com',
                     required=True)
@@ -56,7 +56,8 @@ parser.add_argument('--use_ssh',
 
 args = parser.parse_args()
 
-assert args.add_to_private or args.add_to_organization is not None, 'Please set either add_to_private or provide a target oranization name!'
+if not (args.add_to_private or args.add_to_organization is not None):
+    parser.error("Please either use flag '--add_to_private' or provide an oranization via '--add_to_organization'.")
 
 print('In the following, we will check out all repositories from ')
 print('the namespace %s to the current directory and push it to '%args.source_namespace)
