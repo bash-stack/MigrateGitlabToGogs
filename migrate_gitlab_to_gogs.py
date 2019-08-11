@@ -85,21 +85,26 @@ sessionGitlab = requests.Session()
 # https://docs.gitlab.com/ee/api/#personal-access-tokens
 sessionGitlab.headers.update({'Private-Token': gitlab_token})
 
-page_id = 1
-finished = False
 project_list = []
-while not finished:
-    print("Getting page {}".format(page_id))
-    res = sessionGitlab.get("{}?page={}".format(gitlabProjectsUrl, page_id))
+gitlabProjectsNextPageUrl = gitlabProjectsUrl
+currentPage = 1
+totalPages = "tba"
+
+while gitlabProjectsNextPageUrl is not None:
+    print("Getting projects at page {} / {}...".format(currentPage, totalPages))
+    res = sessionGitlab.get(gitlabProjectsNextPageUrl)
 
     if res.status_code != 200:
         sys.exit("Error: Could not get projects via API. HTTP status code '{} {}' and body: '{}'".format(res.status_code, responses[res.status_code], res.text))
 
     project_list += json.loads(res.text)
-    if len(json.loads(res.text)) < 1:
-        finished = True
+
+    if "next" in res.links:
+        gitlabProjectsNextPageUrl = res.links["next"]["url"]
+        currentPage = currentPage + 1
+        totalPages = res.headers["x-total-pages"]
     else:
-        page_id += 1
+        gitlabProjectsNextPageUrl = None
 
 if len(project_list) == 0:
     print("Warning: Could not get any project via API.")
