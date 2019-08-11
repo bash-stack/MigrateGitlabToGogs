@@ -48,8 +48,8 @@ parser.add_argument('--gogs_url',
 
 parser.add_argument('--add_to_private',
                     default=None,
-                    action='store_true',
-                    help='If you want to add the repositories under your own name, i.e. not in any organisation, use this flag.')
+                    metavar='USER_NAME',
+                    help='If you want to add the repositories under your own name, i.e. not in any organisation, use this parameter to specify your username.')
 parser.add_argument('--add_to_organization',
                     default=None,
                     metavar='ORGANIZATION_NAME',
@@ -67,13 +67,16 @@ parser.add_argument('--use_ssh',
 
 args = parser.parse_args()
 
-if not (args.add_to_private or args.add_to_organization is not None):
-    parser.error("Please either use flag '--add_to_private' or provide an oranization via '--add_to_organization'.")
+if not (args.add_to_private or args.add_to_organization):
+    parser.error("Please provide a user name via '--add_to_private' or an oranization name via '--add_to_organization'.")
+
+if args.add_to_private and args.add_to_organization:
+    parser.error("Please provide either a user name via '--add_to_private' or an oranization name via '--add_to_organization' (not both).")
 
 print("Going to clone all repositories in namespace '{}' at the GitLab instance at {} to the current working directory ".format(args.gitlab_namespace, args.gitlab_url), end="")
 print("and push them as repositories to ", end="")
 if args.add_to_private:
-    print("your personal account ", end="")
+    print("your personal account '{}' ".format(args.add_to_private), end="")
 else:
     print("organisation '{}' ".format(args.add_to_organization), end="")
 print("at the Gogs / Gitea instance at {}.".format(args.gogs_url))
@@ -207,7 +210,7 @@ for projectCounter in range(numberOfProjectsToMigrate):
     # This has to be done after migrating the repository -- as it might be archived.
     # If we would set the repository as archived before we would have pushed it,
     # this would faile because one cannot push to archived repositories.
-    patch_url = "{}/repos/{}/{}".format(gogs_api_url, args.add_to_organization, dst_name)
+    patch_url = "{}/repos/{}/{}".format(gogs_api_url, args.add_to_organization if args.add_to_organization else args.add_to_private, dst_name)
 
     editRepoOption = {
         "allow_merge_commits":          dst_info["allow_merge_commits"],            # no equivalent GitLab setting found
