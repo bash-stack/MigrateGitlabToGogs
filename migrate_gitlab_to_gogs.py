@@ -193,6 +193,9 @@ for projectCounter in range(numberOfProjectsToMigrate):
                 print("Shall we skip that existing repository and continue?")
                 askToContinue(args, True)
             continue
+        # 422: Unprocessable Entity
+        elif create_repo.status_code == 422:
+            sys.exit("Error: Cannot handle HTTP status code. Organization '{}' might not exist.".format(args.add_to_organization))
         else:
             sys.exit("Error: Cannot handle HTTP status code.")
 
