@@ -4,8 +4,17 @@ import requests
 import json
 import subprocess
 import os
+import sys
 
 import argparse
+
+def askToContinue(args):
+    if not args.no_confirm:
+        try:
+            input('Press Enter to continue or hit the interrupt key (normally Control-C or Delete) to cancel.')
+        except KeyboardInterrupt:
+            print()
+            sys.exit("Canceling as requested by the user.")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--source_namespace',
@@ -41,8 +50,7 @@ else:
     print('to the organisation %s'%args.add_to_organization, end='')
 print(' as private repositories.')
 
-if not args.no_confirm:
-    input('Hit any key to continue!')
+askToContinue(args)
 
 gogs_url = args.target_repo + "/api/v1"
 gitlab_url = args.source_repo + '/api/v4'
@@ -102,10 +110,7 @@ print('\n\nFinished preparations. We are about to migrate the following projects
 
 print('\n'.join([p['path_with_namespace'] for p in filtered_projects]))
 
-if not args.no_confirm:
-    if 'yes' != input('Do you want to continue? (please answer yes or no) '):
-        print('\nYou decided to cancel...')
-
+askToContinue(args)
 
 for i in range(len(filtered_projects)):
     src_name = filtered_projects[i]['name']
@@ -118,9 +123,7 @@ for i in range(len(filtered_projects)):
 
     print('\n\nMigrating project %s to project %s now.'%(src_url,dst_name))
 
-    if not args.no_confirm:
-        if 'yes' != input('Do you want to continue? (please answer yes or no) '):
-            print('\nYou decided to cancel...')
+    askToContinue(args)
 
     # Create repo
     if args.add_to_private:
@@ -136,9 +139,7 @@ for i in range(len(filtered_projects)):
         if args.skip_existing:
             print('\nSkipped')
         else:
-            if 'yes' != input('Do you want to skip this repo and continue with the next? (please answer yes or no) '):
-                print('\nYou decided to cancel...')
-                exit(1)
+            askToContinue(args)
         continue
 
     dst_info = json.loads(create_repo.text)
@@ -161,7 +162,6 @@ for i in range(len(filtered_projects)):
 
     print('\n\nFinished migration. New project URL is %s'%dst_info['html_url'])
     print('Please open the URL and check if everything is fine.')
-    if not args.no_confirm:
-        input('Hit any key to continue!')
+    askToContinue(args)
 
 print('\n\nEverything finished!\n')
