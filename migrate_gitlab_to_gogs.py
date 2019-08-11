@@ -75,26 +75,15 @@ gogs_url = args.target_repo + "/api/v1"
 gitlab_token = getToken('GitLab', 'gitlab_token', "{}/profile/personal_access_tokens".format(args.source_repo))
 gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applications".format(args.target_repo))
 
-#tmp_dir = '/home/simon/tmp/gitlab_gogs_migration'
-#print('Using temporary directory %s'%tmp_dir)
-## Create temporary directory
-#try:
-    #os.makedirs(tmp_dir)
-    #print('Created temporary directory %s'%tmp_dir)
-#except FileExistsError as e:
-    #pass
-#except Exception as e:
-    #raise e
+print()
+print("Getting projects from Gitlab...")
 
-#os.chdir(tmp_dir)
-
-print('Getting existing projects from namespace %s...'%args.source_namespace)
 s = requests.Session()
 page_id = 1
 finished = False
 project_list = []
 while not finished:
-    print('Getting page %s'%page_id)
+    print("Getting page {}".format(page_id))
     res = s.get(gitlab_url + '/projects?private_token=%s&page=%s'%(gitlab_token,page_id))
     assert res.status_code == 200, 'Error when retrieving the projects. The returned html is %s'%res.text
     project_list += json.loads(res.text)
@@ -105,9 +94,11 @@ while not finished:
 
 filtered_projects = list(filter(lambda x: x['path_with_namespace'].split('/')[0]==args.source_namespace, project_list))
 
-print('\n\nFinished preparations. We are about to migrate the following projects:')
 
-print('\n'.join([p['path_with_namespace'] for p in filtered_projects]))
+print("Going to migrate the following GitLab projects and repositories, respectively:")
+
+for p in ([p['path_with_namespace'] for p in filtered_projects]):
+    print("- {}".format(p))
 
 askToContinue(args)
 
