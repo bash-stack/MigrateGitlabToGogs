@@ -59,13 +59,13 @@ args = parser.parse_args()
 if not (args.add_to_private or args.add_to_organization is not None):
     parser.error("Please either use flag '--add_to_private' or provide an oranization via '--add_to_organization'.")
 
-print("Going to clone all repositories in namespace '{}' at '{}' to the current working directory ".format(args.source_namespace, args.source_repo), end="")
+print("Going to clone all repositories in namespace '{}' at the GitLab instance at {} to the current working directory ".format(args.source_namespace, args.source_repo), end="")
 print("and push them as private repositories to ", end="")
 if args.add_to_private:
     print("your personal account ", end="")
 else:
     print("organisation '{}' ".format(args.add_to_organization), end="")
-print("at '{}'.".format(args.target_repo))
+print("at the Gogs / Gitea instance at {}.".format(args.target_repo))
 
 askToContinue(args)
 
@@ -76,7 +76,7 @@ gitlab_token = getToken('GitLab', 'gitlab_token', "{}/profile/personal_access_to
 gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applications".format(args.target_repo))
 
 print()
-print("Getting projects from Gitlab...")
+print("Getting projects from GitLab at {}...".format(args.source_repo))
 
 s = requests.Session()
 page_id = 1
