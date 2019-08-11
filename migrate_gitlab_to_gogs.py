@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
+import argparse
+import os
 import requests
 from http.client import responses
-import json
 import subprocess
-import os
 import sys
-
-import argparse
 
 def askToContinue(args, force = False):
     if force or (not args.no_confirm):
