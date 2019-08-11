@@ -158,6 +158,7 @@ for projectCounter in range(numberOfProjectsToMigrate):
     # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
     if create_repo.status_code != 201:
         print("Warning: Could not create repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_name, create_repo.status_code, responses[create_repo.status_code], create_repo.text))
+        # 409: Conflict - Indicates that the request could not be processed because of conflict in the current state of the resource.
         if create_repo.status_code == 409:
             if args.skip_existing:
                 print("Skipping existing repository.")
