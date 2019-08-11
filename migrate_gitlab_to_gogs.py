@@ -23,7 +23,7 @@ def getToken(tokenName, tokenEnvName, tokenURL):
             sys.exit("Error: Environment variable '{}' must not be empty.".format(tokenEnvName))
     else:
         print()
-        print("Please provide your personal {} access token.".format(tokenName))
+        print("Please enter your personal {} access token. Alternatively, you can define environment variable '{}'.".format(tokenName, tokenEnvName))
         print("Hint: That token is not your password but a hash value which consists of random letters and numbers.")
         print("      You can generate an access token at {}.".format(tokenURL))
         token = input("{}=".format(tokenEnvName))
