@@ -34,24 +34,24 @@ def getToken(tokenName, tokenEnvName, tokenURL):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--source_namespace',
-                    help='The namespace in gitlab as it appears in URLs. For example, given the repository address http://mygitlab.com/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". Hence I would pass harry as parameter.',
+                    help='The namespace in GitLab as it appears in URLs. For example, given the repository address http://my.gitlab.net/harry/my-awesome-repo.git, it shows that this repository lies within my personal namespace "harry". In that case, I would pass harry as parameter.',
                     required=True)
-parser.add_argument('--add_to_private',default=None, action='store_true',help='If you want to add the repositories under your own name, ie. not in any organisation, use this flag.')
-parser.add_argument('--add_to_organization',default=None, metavar='ORGANIZATION_NAME', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in Gitlab. The name can be taken from the URL, for example, if your organization is http://mygogs-repo.com/org/my-awesome-organisation/dashboard then pass my-awesome-organisation here')
+parser.add_argument('--add_to_private',default=None, action='store_true',help='If you want to add the repositories under your own name, i.e. not in any organisation, use this flag.')
+parser.add_argument('--add_to_organization',default=None, metavar='ORGANIZATION_NAME', help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
 parser.add_argument('--source_repo',
-                    help='URL to your gitlab repo in the format http://mygitlab.com',
+                    help='URL to your GitLab instance. Must be in the format: http://my.gitlab.net',
                     required=True)
 parser.add_argument('--target_repo',
-                    help='URL to your gogs / gitea repo in the format http://mygogs.com',
+                    help='URL to your Gogs / Gitea instance. Must be in the format: http://my.gogs.net',
                     required=True)
 parser.add_argument('--no_confirm',
-                    help='Skip user confirmation of each single step',
+                    help='Skip user confirmation of each single step.',
                     action='store_true')
 parser.add_argument('--skip_existing',
-                    help='Skip repositories that already exist on remote without asking the user',
+                    help='Skip any repository that already exists on the Gogs / Gitea instance without asking for confirmation.',
                     action='store_true')
 parser.add_argument('--use_ssh',
-                    help='Use ssh to pull/push files to repos',
+                    help='Use SSH instead of HTTP(S) to clone and push repositories.',
                     action='store_true')
 
 args = parser.parse_args()
