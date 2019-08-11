@@ -76,22 +76,33 @@ gogs_url = args.target_repo + "/api/v1"
 gitlab_token = getToken('GitLab', 'gitlab_token', "{}/profile/personal_access_tokens".format(args.source_repo))
 gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applications".format(args.target_repo))
 
-print()
-print("Getting projects from GitLab at {}...".format(args.source_repo))
+gitlabProjectsUrl = "{}/projects".format(gitlab_url)
 
-s = requests.Session()
+print()
+print("Getting projects from GitLab via API at {}...".format(gitlabProjectsUrl))
+
+sessionGitlab = requests.Session()
+# https://docs.gitlab.com/ee/api/#personal-access-tokens
+sessionGitlab.headers.update({'Private-Token': gitlab_token})
+
 page_id = 1
 finished = False
 project_list = []
 while not finished:
     print("Getting page {}".format(page_id))
-    res = s.get(gitlab_url + '/projects?private_token=%s&page=%s'%(gitlab_token,page_id))
-    assert res.status_code == 200, 'Error when retrieving the projects. The returned html is %s'%res.text
+    res = sessionGitlab.get("{}?page={}".format(gitlabProjectsUrl, page_id))
+
+    if res.status_code != 200:
+        sys.exit("Error: Could not get projects via API. HTTP status code '{} {}' and body: '{}'".format(res.status_code, responses[res.status_code], res.text))
+
     project_list += json.loads(res.text)
     if len(json.loads(res.text)) < 1:
         finished = True
     else:
         page_id += 1
+
+if len(project_list) == 0:
+    print("Warning: Could not get any project via API.")
 
 filtered_projects = list(filter(lambda x: x['path_with_namespace'].split('/')[0]==args.source_namespace, project_list))
 
@@ -101,6 +112,10 @@ for p in ([p['path_with_namespace'] for p in filtered_projects]):
     print("- {}".format(p))
 
 askToContinue(args)
+
+sessionGogs = requests.Session()
+# https://docs.gitea.io/en-us/api-usage/#more-on-the-authorization-header
+sessionGogs.headers.update({'Authorization': 'token {}'.format(gogs_token)})
 
 for projectCounter in range(len(filtered_projects)):
     src_name = filtered_projects[projectCounter]['name']
@@ -123,11 +138,11 @@ for projectCounter in range(len(filtered_projects)):
 
     print()
     print("[{}/{}] Creating private repository '{}' via POSTing to: {}".format(projectCounter + 1, len(filtered_projects), dst_name, post_url))
-    create_repo = s.post(post_url, data=dict(token=gogs_token, name=dst_name, private=True, description=src_description))
+    create_repo = sessionGogs.post(post_url, data=dict(name=dst_name, private=True, description=src_description))
 
     # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
     if create_repo.status_code != 201:
-        print("Warning: Could not create repository '{}'. HTTP status code '{} {}' and message '{}'.".format(dst_name, create_repo.status_code, responses[create_repo.status_code], json.loads(create_repo.text)['message']))
+        print("Warning: Could not create repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_name, create_repo.status_code, responses[create_repo.status_code], create_repo.text))
         if create_repo.status_code == 409:
             if args.skip_existing:
                 print("Skipping existing repository.")
@@ -136,8 +151,7 @@ for projectCounter in range(len(filtered_projects)):
                 askToContinue(args)
             continue
         else:
-            print("Shall we continue in spite of that error?")
-            askToContinue(args)
+            sys.exit("Error: Cannot handle HTTP status code.")
 
     dst_info = json.loads(create_repo.text)
 
