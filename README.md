@@ -4,8 +4,12 @@ This tool provides an automated way to copy all repositories from a given Gitlab
 namespace (e.g., Gitlab group) to Gogs / Gitea.  There, repositories can be
 migrated to a user's personal space, or to a given organization. The latter
 corresponds to GitLab groups. When migrating repositories, all the branches and
-tags that are available in the GitLab repository will be replicated into the new
-Gogs / Gitea repository. Git notes and other attributes are replicated as well.
+tags, all Git notes, and other attributes that are available in the GitLab
+repository will be replicated into the new Gogs / Gitea repository.
+
+Please note that in GitLab repositories are contained within projects, next to
+the corresponding issues and the corresponding wiki. In Gogs / Gitea, all those
+things are contained within a repository.
 
 The following GitLab settings are replicated:
 
@@ -23,6 +27,18 @@ The following GitLab settings are replicated:
 
 Please note that issues and wiki content will _not_ be migrated.
 
+By default, the tool is interactive: It asks for confirmation for most of the
+steps in the migration process; if an issue occurs, the user will be presented
+with different options on how to proceed. The tool can be run in an
+non-interactive mode as well. Then, it migrates all repositories automatically;
+if an issue occurs, the migration process will be stopped immediately.
+
+You can enforce some attributes on the Gogs / Gitea repository, like making it
+private although the GitLab projects is public. Please see the command line
+options for details.
+
+The tool can use both HTTP(S) and SSH to clone and push repositories.
+
 ## Usage
 
 Run `python3 migrate_gitlab_to_gogs.py --help` for usage information:
@@ -34,8 +50,8 @@ usage: migrate_gitlab_to_gogs.py [-h] --gitlab_url GITLAB_URL
                                  [--add_to_organization ORGANIZATION_NAME]
                                  [--force_private] [--force_archive]
                                  [--force_disable_issues]
-                                 [--force_disable_wiki] [--no_confirm]
-                                 [--skip_existing] [--use_ssh]
+                                 [--force_disable_wiki] [--non_interactive]
+                                 [--skip_existing_target] [--use_ssh]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -57,7 +73,7 @@ optional arguments:
                         to specify your username.
   --add_to_organization ORGANIZATION_NAME
                         If you want to add all the repositories to an
-                        exisiting organisation, please pass the name to this
+                        existing organisation, please pass the name to this
                         parameter. Organizations correspond to groups in
                         GitLab. The name can be taken from the organisation's
                         dashboard URL. For example, if that dashboard is
@@ -75,9 +91,16 @@ optional arguments:
   --force_disable_wiki  Disable wiki in Gogs / Gitea for all migrated
                         repositories even if enabled in corresponding Gitlab
                         project.
-  --no_confirm          Skip user confirmation of each single step.
-  --skip_existing       Skip any repository that already exists on the Gogs /
-                        Gitea instance without asking for confirmation.
+  --non_interactive     Migrate all repositories in the given GitLab namespace
+                        automatically; if an issue occurs, the migration
+                        process will be stopped immediately. By default, the
+                        script asks for confirmation for most of the steps in
+                        the migration process; if an issue occurs, the user
+                        will be presented with different options on how to
+                        proceed.
+  --skip_existing_target
+                        Skip any repository that already exists on the target
+                        Gogs / Gitea instance without asking for confirmation.
   --use_ssh             Use SSH instead of HTTP(S) to clone and push
                         repositories.
 ```
@@ -87,8 +110,11 @@ optional arguments:
 This tools is written in Python 3 using the following modules:
 
 - `argparse`
+- `inquirer`
 - `os`
 - `requests`
 - `responses`
 - `subprocess`
 - `sys`
+
+Please note: The tool has been tested on Linux and macOS only.

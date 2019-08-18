@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
+import inquirer
 import os
 import requests
 from http.client import responses
 import subprocess
 import sys
-
-def askToContinue(args, force = False):
-    if force or (not args.no_confirm):
-        try:
-            input('Press Enter to continue or hit the interrupt key (normally Control-C or Delete) to cancel.')
-        except KeyboardInterrupt:
-            print()
-            sys.exit("Canceling as requested by the user.")
 
 def getToken(tokenName, tokenEnvName, tokenURL):
     if tokenEnvName in os.environ:
@@ -51,7 +44,7 @@ parser.add_argument('--add_to_user',
 parser.add_argument('--add_to_organization',
                     default=None,
                     metavar='ORGANIZATION_NAME',
-                    help='If you want to add all the repositories to an exisiting organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
+                    help='If you want to add all the repositories to an existing organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
 
 parser.add_argument('--force_private',
                     help='Make all migrated repositories private in Gogs / Gitea even if public in corresponding Gitlab project.',
@@ -66,12 +59,11 @@ parser.add_argument('--force_disable_wiki',
                     help='Disable wiki in Gogs / Gitea for all migrated repositories even if enabled in corresponding Gitlab project.',
                     action='store_true')
 
-
-parser.add_argument('--no_confirm',
-                    help='Skip user confirmation of each single step.',
+parser.add_argument('--non_interactive',
+                    help='Migrate all repositories in the given GitLab namespace automatically; if an issue occurs, the migration process will be stopped immediately. By default, the script asks for confirmation for most of the steps in the migration process; if an issue occurs, the user will be presented with different options on how to proceed.',
                     action='store_true')
-parser.add_argument('--skip_existing',
-                    help='Skip any repository that already exists on the Gogs / Gitea instance without asking for confirmation.',
+parser.add_argument('--skip_existing_target',
+                    help='Skip any repository that already exists on the target Gogs / Gitea instance without asking for confirmation.',
                     action='store_true')
 parser.add_argument('--use_ssh',
                     help='Use SSH instead of HTTP(S) to clone and push repositories.',
@@ -85,15 +77,20 @@ if not (args.add_to_user or args.add_to_organization):
 if args.add_to_user and args.add_to_organization:
     parser.error("Please provide either a user name via '--add_to_user' or an oranization name via '--add_to_organization' (not both).")
 
-print("Going to clone all repositories in namespace '{}' at the GitLab instance at {} to the current working directory ".format(args.gitlab_namespace, args.gitlab_url), end="")
+def askForConfirmationIfInteractive():
+    if not args.non_interactive:
+        if not inquirer.confirm("Do you want to continue?"):
+            sys.exit("Canceling as requested by the user.")
+
+print("Going to clone all repositories in namespace '{}' at the source GitLab instance at {} to the current working directory ".format(args.gitlab_namespace, args.gitlab_url), end="")
 print("and push them as repositories to ", end="")
 if args.add_to_user:
     print("your user account '{}' ".format(args.add_to_user), end="")
 else:
     print("organisation '{}' ".format(args.add_to_organization), end="")
-print("at the Gogs / Gitea instance at {}.".format(args.gogs_url))
+print("at the target Gogs / Gitea instance at {}.".format(args.gogs_url))
 
-askToContinue(args)
+askForConfirmationIfInteractive()
 
 gitlab_api_url = args.gitlab_url + '/api/v4'
 gogs_api_url = args.gogs_url + "/api/v1"
@@ -104,7 +101,7 @@ gogs_token = getToken('Gogs / Gitea', 'gogs_token', "{}/user/settings/applicatio
 gitlabProjectsUrl = "{}/projects".format(gitlab_api_url)
 
 print()
-print("Getting projects from GitLab via API at {}...".format(gitlabProjectsUrl))
+print("Getting source projects from GitLab via API at {}...".format(gitlabProjectsUrl))
 
 sessionGitlab = requests.Session()
 # https://docs.gitlab.com/ee/api/#personal-access-tokens
@@ -113,35 +110,47 @@ sessionGitlab.headers.update({'Private-Token': gitlab_token})
 project_list = []
 gitlabProjectsNextPageUrl = gitlabProjectsUrl
 currentPage = 1
-totalPages = "tba"
+totalPages = ""
 
 while gitlabProjectsNextPageUrl is not None:
-    print("Getting projects at page {} / {}...".format(currentPage, totalPages))
+    print("Getting projects at page {}{}...".format(currentPage, totalPages))
     res = sessionGitlab.get(gitlabProjectsNextPageUrl)
 
     if res.status_code != 200:
-        sys.exit("Error: Could not get projects via API. HTTP status code '{} {}' and body: '{}'".format(res.status_code, responses[res.status_code], res.text))
+        sys.exit("Error: Could not get source projects via API. HTTP status code '{} {}' and body: '{}'".format(res.status_code, responses[res.status_code], res.text))
 
+    totalPages = " / {}".format(res.headers["x-total-pages"])
     project_list += res.json()
 
     if "next" in res.links:
         gitlabProjectsNextPageUrl = res.links["next"]["url"]
         currentPage = currentPage + 1
-        totalPages = res.headers["x-total-pages"]
     else:
         gitlabProjectsNextPageUrl = None
 
 if len(project_list) == 0:
-    print("Warning: Could not get any project via API.")
+    sys.exit("Warning: Could not get any source project via API.")
 
 filtered_projects = list(filter(lambda x: x['path_with_namespace'].split('/')[0]==args.gitlab_namespace, project_list))
 
+if len(filtered_projects) == 0:
+    sys.exit("Warning: Could not get any source project in namespace '{}' via API.".format(args.gitlab_namespace))
+
+if not args.non_interactive:
+    print()
+    print("Which GitLab projects do you want to migrate?")
+    selected = inquirer.checkbox(message = "Use up / down arrow keys to navigate, space to select / deselect, enter to confirm and continue", choices = [p['path_with_namespace'] for p in filtered_projects])
+    filtered_projects = list(filter(lambda x: x['path_with_namespace'] in selected, filtered_projects))
+    if len(filtered_projects) == 0:
+        sys.exit("No project selected.")
+
+print()
 print("Going to migrate the following GitLab projects and repositories, respectively:")
 
 for p in ([p['path_with_namespace'] for p in filtered_projects]):
     print("- {}".format(p))
 
-askToContinue(args)
+askForConfirmationIfInteractive()
 
 sessionGogs = requests.Session()
 # https://docs.gitea.io/en-us/api-usage/#more-on-the-authorization-header
@@ -159,45 +168,81 @@ for projectCounter in range(numberOfProjectsToMigrate):
         src_url = currentGitlabProject['http_url_to_repo']
     dst_name = src_name.replace(' ','-')
 
-    print()
-    print("[{}/{}] Migrating repository at {} to destination '{}'...".format(projectCounter + 1, numberOfProjectsToMigrate, src_url, dst_name))
-    askToContinue(args)
+    dst_path = "{}/{}".format(args.add_to_organization if args.add_to_organization else args.add_to_user, dst_name)
 
-    post_url = None
-    if args.add_to_user:
-        post_url = gogs_api_url + '/user/repos'
-    else:
-        post_url = gogs_api_url + "/org/{}/repos".format(args.add_to_organization)
+    def printProgress(msg, *values):
+        print(msg.format(projectCounter + 1, numberOfProjectsToMigrate, dst_path, *values))
 
-    createRepoOption = {
-        "auto_init": False, # Do NOT initialize repository as this would add .gitignore, License, and README.
-        "description": currentGitlabProject["description"],
-        "name": dst_name,
-        "private": False if currentGitlabProject["visibility"] == "public" else True, # private and internal GitLab projects become private repositories
-    }
+    dst_info = None
 
     print()
-    print("[{}/{}] Creating repository '{}' by POSTing {} to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, createRepoOption, post_url))
-    create_repo = sessionGogs.post(post_url, json=createRepoOption)
+    printProgress("[{}/{}] Migrating to target Gogs / Gitea repository '{}' from source GitLab project at: {}", src_url)
+    askForConfirmationIfInteractive()
 
-    # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
-    if create_repo.status_code != 201:
-        print("Warning: Could not create repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_name, create_repo.status_code, responses[create_repo.status_code], create_repo.text))
-        # 409: Conflict - Indicates that the request could not be processed because of conflict in the current state of the resource.
-        if create_repo.status_code == 409:
-            if args.skip_existing:
-                print("Skipping existing repository.")
-            else:
-                print("Shall we skip that existing repository and continue?")
-                askToContinue(args, True)
+    get_url = "{}/repos/{}".format(gogs_api_url, dst_path)
+
+    printProgress("[{}/{}] Testing if target repository '{}' already exists by GETting: {}", get_url)
+    get_repo = sessionGogs.get(get_url)
+    # 200: OK - Standard response for successful HTTP requests.
+    if get_repo.status_code == 200:
+        if args.skip_existing_target:
+            printProgress("[{}/{}] Skipping existing target repository '{}'.")
             continue
-        # 422: Unprocessable Entity
-        elif create_repo.status_code == 422:
-            sys.exit("Error: Cannot handle HTTP status code. Organization '{}' might not exist.".format(args.add_to_organization))
+        elif args.non_interactive:
+            sys.exit("Error: Canceling because target repository exists already.")
         else:
-            sys.exit("Error: Cannot handle HTTP status code.")
+            dst_info = get_repo.json()
+            if dst_info['empty']:
+                print("Target repository '{}' exists already and is empty.".format(dst_path))
+                print("Do you want to skip this repository, to use this empty repository as migration target, or to completely cancel the migration?")
+                choice = inquirer.list_input("Use up / down arrow keys to navigate, enter to confirm and continue",
+                                    choices=['skip', 'migrate', 'cancel'])
+                if choice == "skip":
+                    printProgress("[{}/{}] Skipping target repository '{}' as requested by the user.")
+                    continue
+                elif choice == "migrate":
+                    pass
+                else:
+                    sys.exit("Canceling as requested by the user.")
 
-    dst_info = create_repo.json()
+            else:
+                print("Warning: Target repository '{}' alread exists and contains some data. If you do not want to skip it, the migration will be canceled.".format(dst_path))
+                if inquirer.confirm("Do you want to skip this repository and continue? "):
+                    printProgress("[{}/{}] Skipping target repository '{}' as requested by the user.")
+                    continue
+                else:
+                    sys.exit("Canceling as target repository '{}' exists already and is not empty.".format(dst_path))
+    else:
+        printProgress("[{}/{}] Target repository '{}' does not exist yet.")
+
+    if not dst_info:
+        # creating repository as it does not exist already
+        post_url = None
+        if args.add_to_user:
+            post_url = gogs_api_url + '/user/repos'
+        else:
+            post_url = gogs_api_url + "/org/{}/repos".format(args.add_to_organization)
+
+        createRepoOption = {
+            "auto_init": False, # Do NOT initialize repository as this would add .gitignore, License, and README.
+            "description": currentGitlabProject["description"],
+            "name": dst_name,
+            "private": False if currentGitlabProject["visibility"] == "public" else True, # private and internal GitLab projects become private repositories
+        }
+
+        printProgress("[{}/{}] Creating target repository '{}' by POSTing {} to: {}", createRepoOption, post_url)
+        create_repo = sessionGogs.post(post_url, json=createRepoOption)
+
+        # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
+        if create_repo.status_code == 201:
+            printProgress("[{}/{}] Created target repository '{}'.")
+            dst_info = create_repo.json()
+        else:
+            # 422: Unprocessable Entity
+            if create_repo.status_code == 422:
+                sys.exit("Error: Could not create target repository '{}'. HTTP status code '{} {}' (organization '{}' might not exist) and body: '{}'".format(dst_path, create_repo.status_code, responses[create_repo.status_code], args.add_to_organization, create_repo.text))
+            else:
+                sys.exit("Error: Could not create target repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_path, create_repo.status_code, responses[create_repo.status_code], create_repo.text))
 
     if args.use_ssh:
         dst_url = dst_info['ssh_url']
@@ -205,19 +250,20 @@ for projectCounter in range(numberOfProjectsToMigrate):
         dst_url = dst_info['html_url']
 
     # Mirror the git repository (http://blog.plataformatec.com.br/2013/05/how-to-properly-mirror-a-git-repository/)
-    print()
-    print("[{}/{}] Cloning repository from: {}".format(projectCounter + 1, numberOfProjectsToMigrate, src_url))
+    printProgress("[{}/{}] Cloning source repository for target '{}' from: {}", src_url)
     subprocess.check_call(['git', 'clone', '--mirror', src_url])
+    printProgress("[{}/{}] Cloned source repository for target '{}'.")
 
     os.chdir(src_url.split('/')[-1])
 
-    print()
-    print("[{}/{}] Pushing repository to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_url))
+    printProgress("[{}/{}] Pushing to target repository '{}': {}", dst_url)
     branches=subprocess.check_output(['git','branch','-a'])
     if len(branches) == 0:
-        print("Warning: This repository is empty - skipping push.")
+        printProgress("[{}/{}] Skipping push to target repository '{}' because it is empty (no branches).")
     else:
         subprocess.check_call(['git','push','--mirror',dst_url])
+        printProgress("[{}/{}] Pushed to target repository '{}'.")
+
 
     os.chdir('..')
     subprocess.check_call(['rm','-rf',src_url.split('/')[-1]])
@@ -225,7 +271,7 @@ for projectCounter in range(numberOfProjectsToMigrate):
     # This has to be done after migrating the repository -- as it might be archived.
     # If we would set the repository as archived before we would have pushed it,
     # this would faile because one cannot push to archived repositories.
-    patch_url = "{}/repos/{}/{}".format(gogs_api_url, args.add_to_organization if args.add_to_organization else args.add_to_user, dst_name)
+    patch_url = "{}/repos/{}".format(gogs_api_url, dst_path)
 
     editRepoOption = {
         "allow_merge_commits":          dst_info["allow_merge_commits"],            # no equivalent GitLab setting found
@@ -256,19 +302,34 @@ for projectCounter in range(numberOfProjectsToMigrate):
     if args.force_disable_wiki:
         editRepoOption["has_wiki"] = False
 
-    print()
-    print("[{}/{}] Editing repository '{}' by PATCHing with '{}' to: {}".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, editRepoOption, patch_url))
+    printProgress("[{}/{}] Updating settings of target repository '{}' by PATCHing with '{}' to: {}", editRepoOption, patch_url)
     patch_repo = sessionGogs.patch(patch_url, json=editRepoOption)
 
     # 200: OK - Standard response for successful HTTP requests.
-    if patch_repo.status_code != 200:
-        print("Warning: Could not edit repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_name, patch_repo.status_code, responses[patch_repo.status_code], patch_repo.text))
-        print("Shall we ignore that isse and continue?")
-        askToContinue(args, True)
+    if patch_repo.status_code == 200:
+        printProgress("[{}/{}] Updated target repository '{}'.")
+    else:
+        print("Warning: Could not edit target repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_path, patch_repo.status_code, responses[patch_repo.status_code], patch_repo.text))
+        if args.non_interactive:
+            sys.exit("Error: Canceling.")
+        else:
+            if inquirer.confirm("Do you want to ignore that issue and continue?"):
+                continue
+            else:
+                sys.exit("Canceling as requested by the user.")
 
-    print()
-    print("[{}/{}] Completed migration of repository '{}'. Please open the new Gogs / Gitea repository at {}, check there if everything is as expected, and continue the migration afterwards.".format(projectCounter + 1, numberOfProjectsToMigrate, dst_name, dst_info['html_url']))
-    askToContinue(args)
+    if args.non_interactive:
+        printProgress("[{}/{}] Completed migration to target repository '{}'.")
+    else:
+        printProgress("[{}/{}] Completed migration to target repository '{}'. Please go to {}, check if the new Gogs / Gitea repository has been migrated successfully, and continue the migration afterwards.", dst_info['html_url'])
+
+    askForConfirmationIfInteractive()
 
 print()
-print("Migration completed.")
+print("Migration completed -- processed the following GitLab projects and repositories, respectively:")
+for p in ([p['path_with_namespace'] for p in filtered_projects]):
+    print("- {}".format(p))
+
+if args.non_interactive:
+    print()
+    print("Please go to {} and check if the new Gogs / Gitea repositories have been migrated successfully.".format(args.gogs_url))
