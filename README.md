@@ -27,11 +27,18 @@ The following GitLab settings are replicated:
 
 Please note that issues and wiki content will _not_ be migrated.
 
-By default, the tool is interactive: It asks for confirmation for most of the
-steps in the migration process; if an issue occurs, the user will be presented
-with different options on how to proceed. The tool can be run in an
-non-interactive mode as well. Then, it migrates all repositories automatically;
-if an issue occurs, the migration process will be stopped immediately.
+Unless otherwise instructed, the tool is interactive: It asks for confirmation
+for most of the steps in the migration process; if an issue occurs, the user
+will be presented with different options on how to proceed. The tool can be run
+in an non-interactive mode as well. Then, it migrates all repositories
+automatically; if an issue occurs, the migration process will be stopped
+immediately.
+
+By default, the tools expects that the Gogs / Gitea organization already exists.
+If not, the tool cancels the migration. However, you can instruct the tool to
+create any non-existent organization. To give you the opportunity to safely
+review all migrated repositories in that organization, the automatically created
+organization will be private.
 
 You can enforce some attributes on the Gogs / Gitea repository, like making it
 private although the GitLab projects is public. Please see the command line
@@ -48,8 +55,8 @@ usage: migrate_gitlab_to_gogs.py [-h] --gitlab_url GITLAB_URL
                                  --gitlab_namespace GITLAB_NAMESPACE
                                  --gogs_url GOGS_URL [--add_to_user USER_NAME]
                                  [--add_to_organization ORGANIZATION_NAME]
-                                 [--force_private] [--force_archive]
-                                 [--force_disable_issues]
+                                 [--create_organization] [--force_private]
+                                 [--force_archive] [--force_disable_issues]
                                  [--force_disable_wiki] [--non_interactive]
                                  [--skip_existing_target] [--use_ssh]
 
@@ -69,17 +76,21 @@ optional arguments:
                         format: http://my.gogs.net
   --add_to_user USER_NAME
                         If you want to add the repositories under your own
-                        name, i.e. not in any organisation, use this parameter
+                        name, i.e. not in any organization, use this parameter
                         to specify your username.
   --add_to_organization ORGANIZATION_NAME
                         If you want to add all the repositories to an
-                        existing organisation, please pass the name to this
-                        parameter. Organizations correspond to groups in
-                        GitLab. The name can be taken from the organisation's
-                        dashboard URL. For example, if that dashboard is
-                        available at http://my.gogs.net/org/my-awesome-
-                        organisation/dashboard, then pass my-awesome-
-                        organisation as parameter.
+                        organization, please pass the name to this parameter.
+                        Organizations correspond to groups in GitLab. The name
+                        can be taken from the organization's dashboard URL.
+                        For example, if that dashboard is available at
+                        http://my.gogs.net/org/my-awesome-
+                        organization/dashboard, then pass my-awesome-
+                        organization as parameter.
+  --create_organization
+                        If the target Gogs / Gitea organization does not exist
+                        yet, create it and make it private. By default,
+                        organizations are expected to exist already.
   --force_private       Make all migrated repositories private in Gogs / Gitea
                         even if public in corresponding Gitlab project.
   --force_archive       Archive all migrated repositories in Gogs / Gitea even
@@ -110,6 +121,7 @@ optional arguments:
 This tools is written in Python 3 using the following modules:
 
 - `argparse`
+- `datetime`
 - `inquirer`
 - `os`
 - `requests`
@@ -117,4 +129,6 @@ This tools is written in Python 3 using the following modules:
 - `subprocess`
 - `sys`
 
-Please note: The tool has been tested on Linux and macOS only.
+Please note: The tool has been tested on Linux and macOS only. As it depends on
+`inquirer` [which does not support Windows yet](https://github.com/magmax/python-inquirer/issues/63),
+this tool is not compatible with Windows either.

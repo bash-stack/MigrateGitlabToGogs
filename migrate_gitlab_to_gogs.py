@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import inquirer
 import os
 import requests
@@ -40,11 +41,15 @@ parser.add_argument('--gogs_url',
 parser.add_argument('--add_to_user',
                     default=None,
                     metavar='USER_NAME',
-                    help='If you want to add the repositories under your own name, i.e. not in any organisation, use this parameter to specify your username.')
+                    help='If you want to add the repositories under your own name, i.e. not in any organization, use this parameter to specify your username.')
 parser.add_argument('--add_to_organization',
                     default=None,
                     metavar='ORGANIZATION_NAME',
-                    help='If you want to add all the repositories to an existing organisation, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organisation\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organisation/dashboard, then pass my-awesome-organisation as parameter.')
+                    help='If you want to add all the repositories to an organization, please pass the name to this parameter. Organizations correspond to groups in GitLab. The name can be taken from the organization\'s dashboard URL. For example, if that dashboard is available at http://my.gogs.net/org/my-awesome-organization/dashboard, then pass my-awesome-organization as parameter.')
+
+parser.add_argument('--create_organization',
+                    help='If the target Gogs / Gitea organization does not exist yet, create it and make it private. By default, organizations are expected to exist already.',
+                    action='store_true')
 
 parser.add_argument('--force_private',
                     help='Make all migrated repositories private in Gogs / Gitea even if public in corresponding Gitlab project.',
@@ -87,7 +92,7 @@ print("and push them as repositories to ", end="")
 if args.add_to_user:
     print("your user account '{}' ".format(args.add_to_user), end="")
 else:
-    print("organisation '{}' ".format(args.add_to_organization), end="")
+    print("organization '{}' ".format(args.add_to_organization), end="")
 print("at the target Gogs / Gitea instance at {}.".format(args.gogs_url))
 
 askForConfirmationIfInteractive()
@@ -156,6 +161,46 @@ sessionGogs = requests.Session()
 # https://docs.gitea.io/en-us/api-usage/#more-on-the-authorization-header
 sessionGogs.headers.update({'Authorization': 'token {}'.format(gogs_token)})
 
+if args.add_to_organization:
+
+    get_org_url = "{}/orgs/{}".format(gogs_api_url, args.add_to_organization)
+
+    print()
+    print("Testing if organization '{}' already exists by GETting: {}".format(args.add_to_organization, get_org_url))
+    get_org = sessionGogs.get(get_org_url)
+
+    # 200: OK -> org exists
+    if get_org.status_code == 200:
+        print("Okay, organization '{}' exists already.".format(args.add_to_organization))
+    # 404: Not Found -> org does not exist
+    elif get_org.status_code == 404:
+        if not args.create_organization:
+            sys.exit("Error: Organization '{}' does not exist.".format(args.add_to_organization))
+        else:
+            print("Creating private organization as it does not exist yet: {}".format(args.add_to_organization))
+
+            post_org_url = "{}/orgs".format(gogs_api_url)
+
+            createOrgOption = {
+                "username": args.add_to_organization,
+                "description": "Created automatically during migration from GitLab to Gogs / Gitea ({})".format(datetime.datetime.now().replace(microsecond=0).isoformat()),
+                "visibility": "private"
+            }
+
+            print("Creating private organization '{}' by POSTing {} to: {}".format(args.add_to_organization, createOrgOption, post_org_url))
+            create_org = sessionGogs.post(post_org_url, json=createOrgOption)
+
+            # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
+            if create_org.status_code == 201:
+                print("Created private organization: {}".format(args.add_to_organization))
+                create_org.json()
+            else:
+                sys.exit("Error: Could not create organization of target '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_path, create_org.status_code, responses[create_org.status_code], create_org.text))
+    else:
+        sys.exit("Error: Cannot handle HTTP status code '{} {}' and body: '{}'".format(get_org.status_code, responses[get_org.status_code], get_org.text))
+
+
+
 numberOfProjectsToMigrate = len(filtered_projects)
 
 for projectCounter in range(numberOfProjectsToMigrate):
@@ -179,10 +224,10 @@ for projectCounter in range(numberOfProjectsToMigrate):
     printProgress("[{}/{}] Migrating to target Gogs / Gitea repository '{}' from source GitLab project at: {}", src_url)
     askForConfirmationIfInteractive()
 
-    get_url = "{}/repos/{}".format(gogs_api_url, dst_path)
+    get_repo_url = "{}/repos/{}".format(gogs_api_url, dst_path)
 
-    printProgress("[{}/{}] Testing if target repository '{}' already exists by GETting: {}", get_url)
-    get_repo = sessionGogs.get(get_url)
+    printProgress("[{}/{}] Testing if target repository '{}' already exists by GETting: {}", get_repo_url)
+    get_repo = sessionGogs.get(get_repo_url)
     # 200: OK - Standard response for successful HTTP requests.
     if get_repo.status_code == 200:
         if args.skip_existing_target:
@@ -213,15 +258,15 @@ for projectCounter in range(numberOfProjectsToMigrate):
                 else:
                     sys.exit("Canceling as target repository '{}' exists already and is not empty.".format(dst_path))
     else:
-        printProgress("[{}/{}] Target repository '{}' does not exist yet.")
+        printProgress("[{}/{}] Okay, target repository '{}' does not exist yet.")
 
     if not dst_info:
         # creating repository as it does not exist already
-        post_url = None
+        post_repo_url = None
         if args.add_to_user:
-            post_url = gogs_api_url + '/user/repos'
+            post_repo_url = gogs_api_url + '/user/repos'
         else:
-            post_url = gogs_api_url + "/org/{}/repos".format(args.add_to_organization)
+            post_repo_url = gogs_api_url + "/org/{}/repos".format(args.add_to_organization)
 
         createRepoOption = {
             "auto_init": False, # Do NOT initialize repository as this would add .gitignore, License, and README.
@@ -230,19 +275,15 @@ for projectCounter in range(numberOfProjectsToMigrate):
             "private": False if currentGitlabProject["visibility"] == "public" else True, # private and internal GitLab projects become private repositories
         }
 
-        printProgress("[{}/{}] Creating target repository '{}' by POSTing {} to: {}", createRepoOption, post_url)
-        create_repo = sessionGogs.post(post_url, json=createRepoOption)
+        printProgress("[{}/{}] Creating target repository '{}' by POSTing {} to: {}", createRepoOption, post_repo_url)
+        create_repo = sessionGogs.post(post_repo_url, json=createRepoOption)
 
         # 201: Created - The request has been fulfilled, resulting in the creation of a new resource.
         if create_repo.status_code == 201:
             printProgress("[{}/{}] Created target repository '{}'.")
             dst_info = create_repo.json()
         else:
-            # 422: Unprocessable Entity
-            if create_repo.status_code == 422:
-                sys.exit("Error: Could not create target repository '{}'. HTTP status code '{} {}' (organization '{}' might not exist) and body: '{}'".format(dst_path, create_repo.status_code, responses[create_repo.status_code], args.add_to_organization, create_repo.text))
-            else:
-                sys.exit("Error: Could not create target repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_path, create_repo.status_code, responses[create_repo.status_code], create_repo.text))
+            sys.exit("Error: Could not create target repository '{}'. HTTP status code '{} {}' and body: '{}'".format(dst_path, create_repo.status_code, responses[create_repo.status_code], create_repo.text))
 
     if args.use_ssh:
         dst_url = dst_info['ssh_url']
