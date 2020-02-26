@@ -46,7 +46,51 @@ options for details.
 
 The tool can use both HTTP(S) and SSH to clone and push repositories.
 
+## Important Security Note
+
+In order to simplify the process of running this script with servers that use self-signed certificates I have **disabled certificate verification**. If you do not know and trust the servers that you are migrating to and from **do not use this fork** as it will not check for faked certificates.
+
+
+## Requirements
+
+This tools is written in Python 3 and uses the following modules:
+
+- `argparse`
+- `datetime`
+- `inquirer`
+- `os`
+- `requests`
+- `responses`
+- `subprocess`
+- `sys`
+
+**Note:** Most of the modules required are from Pythons standard library, but for those that arn't we recommend that they be installed in a virtual environement.
+
+## Installation
+
+After cloning down this project, the first thing you'll need to do is setup a virtual environment. There are several ways to do this but we recommend just using python3's built in `venv` command:
+
+```
+python3 -m venv .venv
+```
+
+Once the virtual environment has been setup you will need to activate it in order to install packages inside of it.
+
+```
+source .venv/bin/activate
+```
+
+You should now see the name of the virtual environment appended to the current user and path in your terminal. (e.g. `$ (.venv) user@dev-server:/current/path/`)
+
+Now you can install the package dependencies using pip.
+
+```
+pip install -r requirements.txt
+```
+
 ## Usage
+
+**Virtual Environment Note:** If you installed the package dependencies in a virtual environment you will need to activate it before you can run the migration script (e.g.`source .venv/bin/activate`)
 
 Run `python3 migrate_gitlab_to_gogs.py --help` for usage information:
 
@@ -116,18 +160,30 @@ optional arguments:
                         repositories.
 ```
 
-## Requirements
 
-This tools is written in Python 3 using the following modules:
+### Example command
 
-- `argparse`
-- `datetime`
-- `inquirer`
-- `os`
-- `requests`
-- `responses`
-- `subprocess`
-- `sys`
+#### Group to Organization
+
+The below command is used to migrate all of the repositories stored in Gitlab's `old` group to the `new` organization in Gitea:
+
+```
+python migrate_gitlab_to_gogs.py --gitlab_namespace old --add_to_organization new --gitlab_url http://gitlab.devserver.localdomain:30080 --gogs_url https://gitea.devserver.localdomain:3000 --skip_existing_target --use_ssh
+```
+
+**NOTE:** This command uses the `--use_ssh` flag so you won't have to type in the username and password for each repository. This requires both Gitlab and Gitea to have SSH setup and configured.
+
+##### User to Different User
+
+This command is used to migrate all of the repositories stored in Gitlab's `old` user to the `new` user account in Gitea:
+
+```
+python migrate_gitlab_to_gogs.py --gitlab_namespace old --add_to_user new --gitlab_url http://gitlab.devserver.localdomain:30080 --gogs_url https://gitea.devserver.localdomain:3000 --skip_existing_target --use_ssh
+```
+
+**NOTE:** This command uses the `--use_ssh` flag so you won't have to type in the username and password for each repository. This requires both Gitlab and Gitea to have SSH setup and configured.
+
+### Compatibility
 
 Please note: The tool has been tested on Linux and macOS only. As it depends on
 `inquirer` [which does not support Windows yet](https://github.com/magmax/python-inquirer/issues/63),

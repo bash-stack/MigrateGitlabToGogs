@@ -119,7 +119,7 @@ totalPages = ""
 
 while gitlabProjectsNextPageUrl is not None:
     print("Getting projects at page {}{}...".format(currentPage, totalPages))
-    res = sessionGitlab.get(gitlabProjectsNextPageUrl)
+    res = sessionGitlab.get(gitlabProjectsNextPageUrl,verify=False)
 
     if res.status_code != 200:
         sys.exit("Error: Could not get source projects via API. HTTP status code '{} {}' and body: '{}'".format(res.status_code, responses[res.status_code], res.text))
@@ -167,7 +167,7 @@ if args.add_to_organization:
 
     print()
     print("Testing if organization '{}' already exists by GETting: {}".format(args.add_to_organization, get_org_url))
-    get_org = sessionGogs.get(get_org_url)
+    get_org = sessionGogs.get(get_org_url,verify=False)
 
     # 200: OK -> org exists
     if get_org.status_code == 200:
@@ -227,7 +227,7 @@ for projectCounter in range(numberOfProjectsToMigrate):
     get_repo_url = "{}/repos/{}".format(gogs_api_url, dst_path)
 
     printProgress("[{}/{}] Testing if target repository '{}' already exists by GETting: {}", get_repo_url)
-    get_repo = sessionGogs.get(get_repo_url)
+    get_repo = sessionGogs.get(get_repo_url,verify=False)
     # 200: OK - Standard response for successful HTTP requests.
     if get_repo.status_code == 200:
         if args.skip_existing_target:
