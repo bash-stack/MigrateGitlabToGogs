@@ -292,17 +292,17 @@ for projectCounter in range(numberOfProjectsToMigrate):
 
     # Mirror the git repository (http://blog.plataformatec.com.br/2013/05/how-to-properly-mirror-a-git-repository/)
     printProgress("[{}/{}] Cloning source repository for target '{}' from: {}", src_url)
-    subprocess.check_call(['git', '-c http.sslVerify=false', 'clone', '--mirror', src_url])
+    subprocess.check_call(['git', '-c', 'http.sslVerify=false', 'clone', '--mirror', src_url])
     printProgress("[{}/{}] Cloned source repository for target '{}'.")
 
     os.chdir(src_url.split('/')[-1])
 
     printProgress("[{}/{}] Pushing to target repository '{}': {}", dst_url)
-    branches=subprocess.check_output(['git','-c http.sslVerify=false','branch','-a'])
+    branches=subprocess.check_output(['git','-c','http.sslVerify=false','branch','-a'])
     if len(branches) == 0:
         printProgress("[{}/{}] Skipping push to target repository '{}' because it is empty (no branches).")
     else:
-        subprocess.check_call(['git','-c http.sslVerify=false','push','--mirror',dst_url])
+        subprocess.check_call(['git','-c','http.sslVerify=false','push','--mirror',dst_url])
         printProgress("[{}/{}] Pushed to target repository '{}'.")
 
 
